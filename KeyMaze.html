@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Key Maze Search Simulator</title>
+<style>
+  :root {
+    --bg: #06111f; --panel: rgba(12, 31, 54, .88); --panel-2: #0c2238; --border: #1a3a5c; --border-hi: #24527d;
+    --cell: #0e2742; --cell-border: #1c4168; --text: #e3eef9; --muted: #7d9abb;
+    --cyan: #22d3ee; --teal: #14b8a6; --gold: #f5b021; --green: #34d399; --red: #ef4444; --orange: #fb923c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; color: var(--text); font: 14px/1.45 "Segoe UI", system-ui, Arial, sans-serif;
+         background: radial-gradient(ellipse at 20% 0%, #0f2c4d 0%, transparent 55%),
+                     radial-gradient(ellipse at 90% 100%, #0b2a3f 0%, transparent 50%), var(--bg);
+         min-height: 100vh; }
+  .muted { color: var(--muted); }
+  .mono { font-family: Consolas, "Courier New", monospace; white-space: nowrap; }
+
+  /* Header */
+  header { display: flex; align-items: center; gap: 14px; padding: 14px 24px; border-bottom: 1px solid var(--border);
+           background: linear-gradient(90deg, rgba(34, 211, 238, .08), transparent 60%); }
+  header svg { width: 42px; height: 42px; flex: none; filter: drop-shadow(0 0 6px rgba(34, 211, 238, .5)); }
+  header h1 { margin: 0; font: 600 26px/1.1 Bahnschrift, "Segoe UI", sans-serif; letter-spacing: .5px; }
+  header h1 b { color: var(--cyan); font-weight: 700; text-shadow: 0 0 12px rgba(34, 211, 238, .45); }
+  header h1 span { color: #c9d8ea; font-weight: 400; }
+  header p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+
+  main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; padding: 16px 24px 24px; max-width: 1440px; margin: 0 auto; }
+  .full { grid-column: 1 / -1; }
+  @media (max-width: 1000px) { main { grid-template-columns: minmax(0, 1fr); padding: 16px; } }
+
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px;
+           box-shadow: 0 8px 24px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .03); min-width: 0; }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  .panel h2 { margin: 0; font: 600 16px Bahnschrift, "Segoe UI", sans-serif; letter-spacing: .3px; }
+  .label-sm { display: block; font-size: 12px; color: #a9c0da; margin-bottom: 4px; }
+  .box { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+  .field { background: #081a2d; border: 1px solid var(--border-hi); border-radius: 6px; padding: 7px 10px; font-weight: 600; min-height: 34px; }
+
+  /* Maze grid + legend */
+  .maze-wrap { display: flex; gap: 20px; flex-wrap: wrap; }
+  #grid { display: grid; grid-template-columns: 20px repeat(5, 64px); grid-template-rows: 20px repeat(5, 64px); gap: 5px; }
+  @media (max-width: 480px) { #grid { grid-template-columns: 16px repeat(5, 52px); grid-template-rows: 16px repeat(5, 52px); } }
+  .label { display: flex; align-items: center; justify-content: center; color: #a9c0da; font-size: 12px; font-weight: 600; }
+  .cell { position: relative; display: flex; align-items: center; justify-content: center; user-select: none;
+          background: var(--cell); border: 1px solid var(--cell-border); border-radius: 6px; transition: background .2s, box-shadow .2s; }
+  .cell .icon { display: flex; width: 70%; height: 70%; }
+  .cell .icon svg { width: 100%; height: 100%; }
+  .cell.wall, .lg .ico.stone { background: radial-gradient(circle at 30% 30%, #8a8f97 0 18%, transparent 19%),
+                           radial-gradient(circle at 70% 65%, #6b7079 0 22%, transparent 23%),
+                           radial-gradient(circle at 25% 80%, #5d626b 0 14%, transparent 15%),
+                           linear-gradient(135deg, #7b8089, #4a4f58);
+               border-color: #2d3139; box-shadow: inset 0 0 0 2px rgba(0, 0, 0, .35), inset 0 -4px 8px rgba(0, 0, 0, .4); }
+  .cell.door-locked { background: linear-gradient(160deg, #e5484d, #9f1d22); border-color: #f87171; box-shadow: 0 0 14px rgba(239, 68, 68, .45); }
+  .cell.door-open { background: linear-gradient(160deg, #22c58b, #0f7a55); border-color: var(--green); box-shadow: 0 0 14px rgba(52, 211, 153, .5); }
+  .cell.explored { background: #143a5f; }
+  .cell.path { background: #11473a; border-color: #1f8a68; }
+  .cell.fringe { border: 2px dashed var(--cyan); }
+  .cell.robot { border: 2px solid var(--cyan); box-shadow: 0 0 14px rgba(34, 211, 238, .55), inset 0 0 10px rgba(34, 211, 238, .2); }
+  .cell.current { border: 2px solid var(--gold); box-shadow: 0 0 14px rgba(245, 176, 33, .55); }
+  .cell .num { position: absolute; top: 2px; left: 5px; font-size: 10px; font-weight: 700; color: var(--green); }
+  .cell .letter { position: absolute; bottom: 2px; right: 5px; font-size: 11px; font-weight: 600; color: var(--text); opacity: .3; pointer-events: none; }
+  .cell .robot-icon { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  .faded { opacity: .25; }
+
+  .legend { border-left: 1px solid var(--border); padding-left: 18px; display: flex; flex-direction: column; gap: 10px; min-width: 170px; }
+  .legend h3 { margin: 0 0 2px; font-size: 13px; font-weight: 600; color: #c9d8ea; }
+  .lg { display: flex; align-items: center; gap: 10px; font-size: 12px; color: #c9d8ea; line-height: 1.2; }
+  .lg small { display: block; color: var(--muted); font-size: 11px; }
+  .lg .ico { width: 30px; height: 30px; flex: none; border-radius: 6px; display: flex; align-items: center; justify-content: center;
+             background: var(--cell); border: 1px solid var(--cell-border); }
+  .lg .ico svg { width: 22px; height: 22px; }
+  .legend .sep { border-top: 1px solid var(--border); margin: 2px 0; }
+
+  /* Controls */
+  select { width: 100%; padding: 9px 10px; background: #081a2d; color: var(--text); border: 1px solid var(--border-hi); border-radius: 6px; font: inherit; }
+  .algo-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; margin-bottom: 14px; align-items: end; }
+  .algo-info b { color: var(--cyan); display: block; }
+  .algo-info span { font-size: 12px; color: #a9c0da; }
+  .status-row { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+  @media (max-width: 560px) { .status-row, .algo-row { grid-template-columns: minmax(0, 1fr); } }
+  .pos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .big-stat { display: flex; align-items: center; gap: 10px; }
+  .big-stat svg { width: 30px; height: 30px; flex: none; }
+  .big-num { font: 700 30px/1 Bahnschrift, "Segoe UI", sans-serif; color: var(--gold); text-shadow: 0 0 10px rgba(245, 176, 33, .4); }
+  .big-num small { font-size: 14px; color: var(--muted); font-weight: 400; text-shadow: none; }
+  .kd { display: grid; grid-template-columns: auto 1fr; gap: 6px 8px; align-items: center; font-size: 12px; }
+  .kd svg { width: 20px; height: 20px; }
+  .pill { display: inline-block; padding: 1px 10px; border-radius: 5px; font-weight: 700; font-size: 12px; background: #081a2d; border: 1px solid var(--border-hi); text-align: center; }
+  .pill.no, .pill.locked { color: #fca5a5; }
+  .pill.yes, .pill.open { color: var(--green); }
+
+  .btn-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+  @media (max-width: 560px) { .btn-row { grid-template-columns: minmax(0, 1fr); } }
+  .bigbtn { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 8px; cursor: pointer; text-align: left;
+            color: var(--text); font: inherit; border: 1px solid; transition: transform .1s, box-shadow .2s, filter .2s; }
+  .bigbtn svg { width: 26px; height: 26px; flex: none; }
+  .bigbtn b { display: block; font-size: 15px; }
+  .bigbtn small { display: block; font-size: 11px; opacity: .8; }
+  .bigbtn:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.12); }
+  .bigbtn.run { background: linear-gradient(160deg, #0f766e, #155e75); border-color: #2dd4bf; box-shadow: 0 0 16px rgba(45, 212, 191, .3); }
+  .bigbtn.next { background: linear-gradient(160deg, #b7791f, #92400e); border-color: #fbbf24; box-shadow: 0 0 16px rgba(251, 191, 36, .3); }
+  .bigbtn.next b { color: #fde68a; }
+  .bigbtn.reset { background: #0e2440; border-color: var(--border-hi); }
+  button:disabled, input:disabled, select:disabled { opacity: .4; cursor: not-allowed; }
+  .node-row { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr; gap: 10px; }
+  @media (max-width: 560px) { .node-row { grid-template-columns: 1fr 1fr; } }
+
+  .badge { display: inline-block; padding: 3px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; background: #1b3352; color: #c9d8ea; }
+  .badge.running { background: var(--cyan); color: #00222b; }
+  .badge.paused { background: var(--gold); color: #2b1a00; }
+  .badge.goal { background: var(--green); color: #00281b; }
+  .badge.limit { background: var(--orange); color: #2b1100; }
+  .badge.failed { background: var(--red); color: #fff; }
+
+  /* Small buttons + setup */
+  .btn { padding: 7px 12px; background: #0e2440; color: var(--text); border: 1px solid var(--border-hi); border-radius: 6px; cursor: pointer; font: inherit; font-size: 13px; }
+  .btn:hover:not(:disabled) { border-color: var(--cyan); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+  table.cfg td { padding: 3px 6px; }
+  input[type=number] { width: 60px; padding: 5px; background: #081a2d; color: var(--text); border: 1px solid var(--border-hi); border-radius: 5px; }
+
+  /* Result banners */
+  .banner { padding: 10px 12px; border-radius: 8px; }
+  .banner + .banner { margin-top: 8px; }
+  .banner p { margin: 6px 0 0; }
+  .banner.goal { background: rgba(52, 211, 153, .12); border: 1px solid var(--green); }
+  .banner.limit { background: rgba(251, 146, 60, .12); border: 1px solid var(--orange); }
+  .banner.failed, .banner.error { background: rgba(239, 68, 68, .12); border: 1px solid var(--red); }
+  .banner.info { background: rgba(34, 211, 238, .1); border: 1px solid var(--cyan); }
+  .banner ul { margin: 4px 0 0; padding-left: 20px; }
+
+  /* Tables */
+  .scroll { overflow: auto; max-height: 460px; border: 1px solid var(--border); border-radius: 8px; }
+  table.data { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.data th, table.data td { padding: 7px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+  table.data th { position: sticky; top: 0; z-index: 1; background: #0f2a47; color: #a9c0da; font-weight: 600; font-size: 12px; }
+  table.data tr:hover td { background: rgba(34, 211, 238, .04); }
+  table.data tr.next td { background: rgba(245, 176, 33, .12); }
+  .empty { padding: 18px; color: var(--muted); text-align: center; }
+  .alt div { white-space: nowrap; font-family: Consolas, "Courier New", monospace; font-size: 12px; }
+  .alt .blocked { color: var(--muted); }
+  .fringe-box { background: var(--panel-2); border: 1px solid var(--border-hi); border-radius: 6px; padding: 6px 8px; }
+  .fringe-box b { display: block; font-size: 12px; margin-bottom: 2px; color: #c9d8ea; }
+  .trace-entry { display: inline-block; margin: 1px 0; font-family: Consolas, "Courier New", monospace; font-size: 12px; white-space: nowrap; }
+  .trace-entry.first { color: var(--gold); font-weight: bold; }
+</style>
+</head>
+<body>
+<header>
+  <svg viewBox="0 0 40 40" fill="none" stroke="#22d3ee" stroke-width="2.5" stroke-linecap="round">
+    <rect x="3" y="3" width="34" height="34" rx="4"/>
+    <path d="M10 3v10h8M3 20h8v10M18 37V26h8M26 13V20h11M18 13v6"/>
+  </svg>
+  <div>
+    <h1><b>KEY MAZE</b> <span>— Search Simulator</span></h1>
+    <p>Collect the key, then unlock the door.</p>
+  </div>
+</header>
+
+<main>
+  <!-- [UI-GRID] Maze grid + legend -->
+  <section class="panel">
+    <div class="panel-head"><h2>Maze Grid (5 × 5)</h2></div>
+    <div class="maze-wrap">
+      <div id="grid"></div>
+      <div class="legend">
+        <h3>Legend</h3>
+        <div class="lg"><span class="ico" data-icon="robot"></span><div>Robot<small>current node</small></div></div>
+        <div class="lg"><span class="ico" data-icon="key"></span><div>Key<small>collect to open door</small></div></div>
+        <div class="lg"><span class="ico" data-icon="lock" style="background:linear-gradient(160deg,#e5484d,#9f1d22);border-color:#f87171"></span><div>Locked door</div></div>
+        <div class="lg"><span class="ico" data-icon="unlock" style="background:linear-gradient(160deg,#22c58b,#0f7a55);border-color:#34d399"></span><div>Open door</div></div>
+        <div class="lg"><span class="ico stone"></span><div>Wall<small>blocked</small></div></div>
+        <div class="lg"><span class="ico"></span><div>Empty cell<small>free</small></div></div>
+        <div class="sep"></div>
+        <div class="lg"><span class="ico" style="background:#143a5f"></span><div>Explored</div></div>
+        <div class="lg"><span class="ico" style="border:2px dashed #22d3ee"></span><div>In fringe</div></div>
+        <div class="lg"><span class="ico" style="background:#11473a;border-color:#1f8a68"></span><div>Solution path</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- [UI-CTRL] [UI-STATUS] [UI-NODE] Algorithm, controls, status, current node -->
+  <section class="panel">
+    <div class="panel-head"><h2>Algorithm &amp; Controls</h2><span class="badge" id="state-badge">Idle</span></div>
+
+    <div class="algo-row">
+      <div>
+        <span class="label-sm">Search Algorithm</span>
+        <select id="algo">
+          <option value="UCS">Uniform Cost Search (UCS)</option>
+          <option value="ASTAR" selected>A* Search</option>
+        </select>
+      </div>
+      <div class="box algo-info"><b id="algo-title"></b><span id="algo-desc"></span></div>
+    </div>
+
+    <div class="status-row">
+      <div>
+        <span class="label-sm">Current Position</span>
+        <div class="pos">
+          <div><span class="label-sm">Row (r)</span><div class="field" id="pos-r"></div></div>
+          <div><span class="label-sm">Column (c)</span><div class="field" id="pos-c"></div></div>
+        </div>
+      </div>
+      <div class="box big-stat">
+        <svg viewBox="0 0 32 32" fill="none" stroke="#7dd3fc" stroke-width="2"><circle cx="16" cy="6" r="3.5" fill="#22d3ee"/><circle cx="7" cy="25" r="3.5"/><circle cx="25" cy="25" r="3.5"/><path d="M14 9 8.5 22M18 9l5.5 13"/></svg>
+        <div><span class="label-sm">Nodes Expanded</span><div class="big-num"><span id="expanded"></span> <small>/ 20</small></div></div>
+      </div>
+      <div class="box kd">
+        <span data-icon="key"></span><div><span class="label-sm" style="margin:0">Key Collected</span><span class="pill" id="key-val"></span></div>
+        <span data-icon="lock" id="door-ico"></span><div><span class="label-sm" style="margin:0">Door Status</span><span class="pill" id="door-val"></span></div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="bigbtn run" id="btn-run">
+        <svg viewBox="0 0 24 24" fill="#5eead4"><path d="M6 4l14 8-14 8z"/></svg>
+        <span><b id="run-title">Run Search</b><small>Until door opens (max 20)</small></span>
+      </button>
+      <button class="bigbtn next" id="btn-next">
+        <svg viewBox="0 0 24 24" fill="#fbbf24"><path d="M3 5l9 7-9 7zM12 5l9 7-9 7z"/></svg>
+        <span><b>Next Step</b><small>Expand one node</small></span>
+      </button>
+      <button class="bigbtn reset" id="btn-reset">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#e3eef9" stroke-width="2.4" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.4-5.7M20 4v5h-5"/></svg>
+        <span><b>Reset</b><small>Clear and start over</small></span>
+      </button>
+    </div>
+
+    <span class="label-sm" style="font-size:13px;font-weight:600;color:#e3eef9">Current Node Details</span>
+    <div class="node-row">
+      <div><span class="label-sm">State</span><div class="field mono" id="node-state"></div></div>
+      <div><span class="label-sm">g(n)</span><div class="field" id="node-g"></div></div>
+      <div><span class="label-sm">h(n)</span><div class="field" id="node-h"></div></div>
+      <div><span class="label-sm">f(n)</span><div class="field" id="node-f"></div></div>
+    </div>
+  </section>
+
+  <!-- Maze setup: start, key, door, walls -->
+  <section class="panel" id="config">
+    <div class="panel-head"><h2>Maze Setup</h2><button class="btn" id="btn-example">Load Example</button></div>
+    <table class="cfg">
+      <tr><td></td><td class="muted">Row</td><td class="muted">Col</td></tr>
+      <tr><td>Start</td><td><input type="number" min="0" max="4" id="start-r"></td><td><input type="number" min="0" max="4" id="start-c"></td></tr>
+      <tr><td>Key</td><td><input type="number" min="0" max="4" id="key-r"></td><td><input type="number" min="0" max="4" id="key-c"></td></tr>
+      <tr><td>Door</td><td><input type="number" min="0" max="4" id="door-r"></td><td><input type="number" min="0" max="4" id="door-c"></td></tr>
+      <tr><td>Wall 1</td><td><input type="number" min="0" max="4" id="wall0-r"></td><td><input type="number" min="0" max="4" id="wall0-c"></td></tr>
+      <tr><td>Wall 2</td><td><input type="number" min="0" max="4" id="wall1-r"></td><td><input type="number" min="0" max="4" id="wall1-c"></td></tr>
+      <tr><td>Wall 3</td><td><input type="number" min="0" max="4" id="wall2-r"></td><td><input type="number" min="0" max="4" id="wall2-c"></td></tr>
+    </table>
+  </section>
+
+  <!-- [UI-FRINGE] Current fringe -->
+  <section class="panel">
+    <div class="panel-head"><h2>Fringe <span class="muted" id="fringe-size" style="font-size:13px;font-weight:400"></span></h2></div>
+    <div class="scroll" id="fringe" style="max-height:330px"></div>
+    <p class="muted" style="margin:8px 0 0;font-size:12px">Tie-breaking: when priorities are equal, paths are compared alphabetically by cell letters (e.g. AB before AC).</p>
+  </section>
+
+  <section class="panel full" id="result"></section>
+
+  <!-- [UI-LOG] Search log -->
+  <section class="panel full">
+    <div class="panel-head">
+      <h2>Search Log</h2>
+      <div class="row" style="margin:0">
+        <span class="muted" id="log-count" style="font-size:12px"></span>
+        <button class="btn" id="btn-copy">Copy Log</button>
+        <button class="btn" id="btn-clear">Clear Log</button>
+      </div>
+    </div>
+    <div class="scroll" id="log"></div>
+  </section>
+
+  <section class="panel full">
+    <div class="panel-head"><h2>Solution Trace <span class="muted" id="trace-desc" style="font-size:13px;font-weight:400"></span></h2></div>
+    <div class="scroll" id="trace"></div>
+  </section>
+</main>
+
+<script>
+/*
+ * KEY MAZE SEARCH SIMULATOR — SE420 AI Project 1 (2026–2027)
+ * Author: Furkan Pala
+ *
+ * REQUIREMENT MAP
+ *  [REQ-STATE] State (row, col, key_collected, door_open) ........ makeState(), stateId(), formatState()
+ *  [REQ-MOVE]  Moves up/down/left/right, cost 1, walls/edges ..... getSuccessors()
+ *  [REQ-KEY]   Key auto-collected; door needs key; Unlock cost 1 . getSuccessors()
+ *  [REQ-1]     UCS and A* implemented ............................ SearchEngine
+ *  [REQ-2]     A*: f(n) = g(n) + h(n) ............................ SearchEngine.priority()
+ *  [REQ-3]     UCS: select lowest g(n) ........................... SearchEngine.priority()
+ *  [REQ-4]     Heuristic (Manhattan via key / to door) ........... heuristic()
+ *  [REQ-5]     Stop at goal or 20 expansions, inform user ........ SearchEngine.step(), renderResult()
+ *  [REQ-6]     Show state, cost, alternatives, fringe ............ StepRecord, renderLog(), renderFringe()
+ *  [REQ-7]     Next Step = exactly one expansion ................. onNextStep()
+ *  [REQ-8]     Show solution path and total cost ................. extractPath(), renderFringe(), renderTrace()
+ *  [UI-GRID]   Grid with coordinates + legend .................... renderGrid(), legend markup
+ *  [UI-CTRL]   Algorithm select, Run(20)/Next/Reset, input ....... onRunSearch(), onNextStep(), onReset(), config panel
+ *  [UI-STATUS] Position, expanded count, key, door status ........ renderStatus()
+ *  [UI-NODE]   Current node g (h, f for A*) ...................... renderNodeDetails()
+ *  [UI-LOG]    Search log with notes ............................. renderLog()
+ *  [UI-FRINGE] Fringe contents + size ............................ renderFringe()
+ *  [UI-TRACE]  Step | Fringe (path - cost) | Expanded table ...... renderTrace(), formatPath()
+ *
+ * DESIGN ASSUMPTIONS
+ *  1. Door semantics: without the key the door cell is impassable (behaves like a wall).
+ *     With the key the robot may move onto the door cell (cost 1) -> (door_row, door_column, True, False).
+ *     On the door cell, with the key and the door closed, "Unlock Door" (cost 1) produces
+ *     (door_row, door_column, True, True). The robot may also move away from the door cell.
+ *  2. Goal state: any state with door_open == True.
+ *  3. The goal test is applied when a node is SELECTED for expansion (not when generated);
+ *     selecting the goal node counts as one expansion. Goal states are never expanded further.
+ *  4. Successor order is fixed: Up, Down, Left, Right, then Unlock Door (if applicable).
+ *  5. Tie-breaking: on equal priority (g for UCS, f for A*) the paths are compared alphabetically
+ *     by their cell letters (e.g. AB before AC, AFK before AFP), as in the class examples.
+ *  6. Graph search: expanded states go into an explored set and are never re-added; a fringe
+ *     node is replaced only if a strictly cheaper path (lower g) to the same state is found.
+ *  7. The key is collected automatically when the robot enters the key cell.
+ *  8. Run Search expands automatically until the goal is reached, the fringe is empty or
+ *     20 states have been expanded (same limit as REQ-5).
+ */
+
+// ===== LOGIC START =====
+// Pure logic: no DOM access. State, heuristic, successors, search engine, validation, self-tests.
+
+const GRID_SIZE = 5;
+const MAX_EXPANSIONS = 20;   // [REQ-5] global limit (also used by Run Search)
+
+// [REQ-MOVE] Fixed successor order — must not change (matches the hand-worked solution in the report).
+const MOVES = [
+  { action: 'Up', dRow: -1, dColumn: 0 },
+  { action: 'Down', dRow: 1, dColumn: 0 },
+  { action: 'Left', dRow: 0, dColumn: -1 },
+  { action: 'Right', dRow: 0, dColumn: 1 },
+];
+
+// Configuration of the example figure in the assignment.
+const DEFAULT_CONFIG = {
+  start: { row: 0, column: 0 },
+  key: { row: 0, column: 4 },
+  door: { row: 2, column: 3 },
+  walls: [{ row: 0, column: 2 }, { row: 1, column: 1 }, { row: 3, column: 1 }],
+};
+
+function manhattan(a, b) {
+  return Math.abs(a.row - b.row) + Math.abs(a.column - b.column);
+}
+
+// [REQ-STATE] State = (row, column, key_collected, door_open)
+function makeState(row, column, key, door) {
+  return { row, column, key, door };
+}
+
+// [REQ-STATE] Unique key used by the fringe and explored set, e.g. "2,1,1,0".
+// The same cell with and without the key are different states.
+function stateId(s) {
+  return `${s.row},${s.column},${s.key ? 1 : 0},${s.door ? 1 : 0}`;
+}
+
+// Cell letter A–Y in row-major order: (0,0) = A, (0,4) = E, (2,3) = N. Same letters as the report.
+function cellLetter(row, column) {
+  return String.fromCharCode(65 + row * GRID_SIZE + column);
+}
+
+// [REQ-STATE] Cell letter + the tuple format of the assignment, e.g. "L (2, 1, True, False)".
+function formatState(s) {
+  return `${cellLetter(s.row, s.column)} (${s.row}, ${s.column}, ${s.key ? 'True' : 'False'}, ${s.door ? 'True' : 'False'})`;
+}
+
+// Validates a configuration: integer coordinates 0–4, exactly 3 walls, all 6 positions distinct.
+function validateConfig(cfg) {
+  const errors = [];
+  const items = [['Start', cfg.start], ['Key', cfg.key], ['Door', cfg.door],
+    ...cfg.walls.map((w, i) => [`Wall ${i + 1}`, w])];
+  if (cfg.walls.length !== 3) errors.push(`Exactly 3 walls are required (currently ${cfg.walls.length}).`);
+  for (const [name, p] of items) {
+    if (![p.row, p.column].every(v => Number.isInteger(v) && v >= 0 && v < GRID_SIZE)) {
+      errors.push(`${name}: row and column must be integers between 0 and 4.`);
+    }
+  }
+  const seen = new Map();
+  for (const [name, p] of items) {
+    const cell = `${p.row},${p.column}`;
+    if (seen.has(cell)) errors.push(`${name} overlaps ${seen.get(cell)} at (${p.row}, ${p.column}).`);
+    else seen.set(cell, name);
+  }
+  return { ok: errors.length === 0, errors };
+}
+
+// [REQ-4] h(n): without the key -> distance to key + distance from key to door;
+// with the key -> distance to door; goal -> 0.
+// Admissible: Manhattan distance never overestimates (walls are ignored) and the
+// final Unlock Door cost of 1 is not counted, so h(n) <= true remaining cost.
+function heuristic(s, cfg) {
+  if (s.door) return 0;                                   // goal
+  if (!s.key) return manhattan(s, cfg.key) + manhattan(cfg.key, cfg.door);
+  return manhattan(s, cfg.door);
+}
+
+// [REQ-MOVE] [REQ-KEY] Successor function.
+// Returns valid successors (each with cost 1) in the fixed order Up, Down, Left, Right, Unlock Door,
+// plus the blocked moves and their reason ('edge' | 'wall' | 'locked door') for logging.
+function getSuccessors(s, cfg) {
+  const successors = [], blocked = [];
+  if (s.door) return { successors, blocked };             // goal state is never expanded
+  for (const m of MOVES) {
+    const row = s.row + m.dRow, column = s.column + m.dColumn;
+    let reason = null;
+    if (row < 0 || row >= GRID_SIZE || column < 0 || column >= GRID_SIZE) reason = 'edge';
+    else if (cfg.walls.some(w => w.row === row && w.column === column)) reason = 'wall';
+    else if (!s.key && row === cfg.door.row && column === cfg.door.column) reason = 'locked door'; // door needs the key
+    if (reason) {
+      blocked.push({ action: m.action, reason });
+      continue;
+    }
+    // [REQ-KEY] Entering the key cell collects the key automatically.
+    const key = s.key || (row === cfg.key.row && column === cfg.key.column);
+    successors.push({ state: makeState(row, column, key, false), action: m.action, stepCost: 1 });
+  }
+  // [REQ-KEY] Unlock Door: only on the door cell, with the key, door still closed. Cost 1.
+  if (s.key && s.row === cfg.door.row && s.column === cfg.door.column) {
+    successors.push({ state: makeState(s.row, s.column, true, true), action: 'Unlock Door', stepCost: 1 });
+  }
+  return { successors, blocked };
+}
+
+// [REQ-1] Graph search engine for UCS ('UCS') and A* ('ASTAR').
+// Fringe: plain array of nodes { state, g, h, f, parent, action, order, pathKey }; the next node is chosen
+// by a linear scan for the lowest priority (ties -> alphabetical path letters, e.g. AB before AC).
+// Explored: Set of stateId.
+// status: 'running' | 'goal' | 'limit' | 'failed'
+class SearchEngine {
+  constructor(cfg, algo) {
+    this.cfg = cfg;
+    this.algo = algo;
+    this.explored = new Set();
+    this.log = [];              // StepRecord[]
+    this.expandedCount = 0;
+    this.status = 'running';
+    this.message = '';
+    this.current = null;        // last expanded node
+    this.path = null;           // solution path once the goal is reached
+    this.nextOrder = 0;         // global insertion counter
+    const start = makeState(cfg.start.row, cfg.start.column, false, false);
+    const h = heuristic(start, cfg);
+    this.fringe = [{ state: start, g: 0, h, f: h, parent: null, action: 'Start', order: this.nextOrder++,
+                     pathKey: cellLetter(start.row, start.column) }];
+  }
+
+  // [REQ-2] A*: priority = f(n) = g(n) + h(n).   [REQ-3] UCS: priority = g(n).
+  priority(node) {
+    return this.algo === 'UCS' ? node.g : node.f;
+  }
+
+  // Fringe order: lowest priority first; ties -> path letters in alphabetical order (AB before AC),
+  // then insertion order. Returns < 0 if a comes before b.
+  compare(a, b) {
+    const d = this.priority(a) - this.priority(b);
+    if (d !== 0) return d;
+    if (a.pathKey !== b.pathKey) return a.pathKey < b.pathKey ? -1 : 1;
+    return a.order - b.order;
+  }
+
+  // Fringe sorted with compare(). First element = next to expand.
+  get fringeSorted() {
+    return [...this.fringe].sort((a, b) => this.compare(a, b));
+  }
+
+  // [REQ-5] [REQ-6] [REQ-7] Performs exactly ONE expansion and returns its StepRecord
+  // (or null if the search is already finished).
+  step() {
+    if (this.status !== 'running') return null;
+    if (this.fringe.length === 0) {
+      this.status = 'failed';
+      this.message = 'No solution: fringe is empty.';
+      return null;
+    }
+
+    // [REQ-6] Fringe BEFORE this expansion, with the full path to every node (class-notes trace table).
+    const fringeBefore = this.fringeSorted.map(n => ({ path: this.extractPath(n).map(p => p.state), g: n.g, h: n.h, f: n.f }));
+
+    // Select the lowest-priority node (linear scan; ties broken alphabetically by path, see compare()).
+    let best = 0;
+    for (let i = 1; i < this.fringe.length; i++) {
+      if (this.compare(this.fringe[i], this.fringe[best]) < 0) best = i;
+    }
+    const node = this.fringe.splice(best, 1)[0];
+    this.expandedCount++;       // selecting the goal node also counts as an expansion
+    this.current = node;
+
+    const s = node.state, cfg = this.cfg;
+    const notes = [];
+    const rec = { step: this.expandedCount, node: s, g: node.g, h: node.h, f: node.f, action: node.action,
+                  successors: [], blocked: [], notes, fringeBefore };
+    if (!node.parent) notes.push('Start state');
+    if (node.parent && !node.parent.state.key && s.key) notes.push('Key collected');
+
+    if (s.door) {
+      // Goal test on selection.
+      notes.push('Door opened — goal reached');
+      this.status = 'goal';
+      this.path = this.extractPath(node);
+      this.message = 'Door opened! Solution found.';
+    } else {
+      this.explored.add(stateId(s));
+      const { successors, blocked } = getSuccessors(s, cfg);
+      rec.blocked = blocked;
+      if (s.key && s.row === cfg.door.row && s.column === cfg.door.column) notes.push('Unlock Door action available');
+      if (blocked.some(b => b.reason === 'locked door')) notes.push('Door locked — key required');
+
+      for (const succ of successors) {
+        const id = stateId(succ.state);
+        const g = node.g + succ.stepCost, h = heuristic(succ.state, cfg);
+        const child = { state: succ.state, g, h, f: g + h, parent: node, action: succ.action,
+                        pathKey: node.pathKey + cellLetter(succ.state.row, succ.state.column) };
+        const idx = this.fringe.findIndex(n => stateId(n.state) === id);
+        let status;
+        if (this.explored.has(id)) status = 'skipped (explored)';
+        else if (idx >= 0 && this.fringe[idx].g <= g) status = `skipped (in fringe, g=${this.fringe[idx].g})`;
+        else {
+          if (idx >= 0) this.fringe.splice(idx, 1);  // a cheaper path replaces the old fringe node
+          child.order = this.nextOrder++;
+          this.fringe.push(child);
+          status = idx >= 0 ? 'updated' : 'added';
+        }
+        rec.successors.push({ state: child.state, action: child.action, g, h, f: child.f, status });
+      }
+
+      if (this.expandedCount >= MAX_EXPANSIONS) {
+        // [REQ-5] Stop after 20 expansions without reaching the goal.
+        this.status = 'limit';
+        this.message = 'Goal not reached within 20 expansions.';
+      } else if (this.fringe.length === 0) {
+        this.status = 'failed';
+        this.message = 'No solution: fringe is empty.';
+      }
+    }
+    if (notes.length === 0) notes.push(`Moved ${node.action}`);
+
+    // [REQ-6] Fringe snapshot AFTER this expansion, sorted by priority.
+    rec.fringeSnapshot = this.fringeSorted.map(n => ({ state: n.state, g: n.g, h: n.h, f: n.f }));
+    rec.fringeSize = this.fringe.length;
+    this.log.push(rec);
+    return rec;
+  }
+
+  // [REQ-8] Follows parent links back to the start: [{ state, action, g }]. Total cost = goal g.
+  extractPath(node) {
+    const path = [];
+    for (let n = node; n; n = n.parent) path.unshift({ state: n.state, action: n.action, g: n.g });
+    return path;
+  }
+}
+
+// Acceptance tests T1–T7 (section 12 of the plan). Prints PASS/FAIL to the console, returns true if all pass.
+function runSelfTests() {
+  const results = [];
+  const check = (name, cond) => results.push({ name, pass: !!cond });
+  const cfg = DEFAULT_CONFIG;
+  const runToEnd = (c, algo) => { const e = new SearchEngine(c, algo); while (e.status === 'running') e.step(); return e; };
+  const ids = (s, c) => getSuccessors(s, c).successors.map(x => stateId(x.state));
+
+  // T1 heuristic
+  check('T1 h(0,0,F,F) = 7', heuristic(makeState(0, 0, false, false), cfg) === 7);
+  check('T1 h(0,4,T,F) = 3', heuristic(makeState(0, 4, true, false), cfg) === 3);
+  check('T1 h(2,3,T,T) = 0', heuristic(makeState(2, 3, true, true), cfg) === 0);
+
+  // T2 locked door
+  check('T2 (2,2,F,F) cannot enter door', !ids(makeState(2, 2, false, false), cfg).some(id => id.startsWith('2,3,')));
+  check('T2 (2,2,T,F) can enter door', ids(makeState(2, 2, true, false), cfg).includes('2,3,1,0'));
+
+  // T3 unlock
+  const atDoor = getSuccessors(makeState(2, 3, true, false), cfg).successors;
+  check('T3 Unlock on door cell', atDoor.some(x => x.action === 'Unlock Door' && stateId(x.state) === '2,3,1,1'));
+  check('T3 no Unlock off door cell', !getSuccessors(makeState(1, 3, true, false), cfg).successors.some(x => x.action === 'Unlock Door'));
+
+  // T4 easy A* scenario
+  const easy = { start: { row: 4, column: 0 }, key: { row: 4, column: 2 }, door: { row: 4, column: 4 }, walls: [{ row: 0, column: 0 }, { row: 0, column: 1 }, { row: 0, column: 2 }] };
+  const e4 = runToEnd(easy, 'ASTAR');
+  const expected = [['4,0,0,0', 0, 4], ['4,1,0,0', 1, 4], ['4,2,1,0', 2, 4], ['4,3,1,0', 3, 4], ['4,4,1,0', 4, 4], ['4,4,1,1', 5, 5]];
+  check('T4 expansion sequence', e4.log.length === 6 && expected.every(([id, g, f], i) =>
+    stateId(e4.log[i].node) === id && e4.log[i].g === g && e4.log[i].f === f));
+  check('T4 h(start) = 4', e4.log[0].h === 4);
+  check('T4 notes', e4.log[2].notes.includes('Key collected') && e4.log[4].notes.includes('Unlock Door action available'));
+  check('T4 goal, cost 5, 6 expansions', e4.status === 'goal' && e4.path.at(-1).g === 5 && e4.expandedCount === 6);
+  check('T4 path actions', e4.path.slice(1).map(p => p.action).join(',') === 'Right,Right,Right,Right,Unlock Door');
+
+  // T5 default example optimal cost (12) or correct limit
+  for (const algo of ['ASTAR', 'UCS']) {
+    const e = runToEnd(cfg, algo);
+    check(`T5 ${algo} default: ${e.status}`, e.status === 'goal' ? e.path.at(-1).g === 12
+      : e.status === 'limit' && e.message === 'Goal not reached within 20 expansions.');
+  }
+
+  // T6 limit never exceeded (random valid configs + default)
+  let limitOk = true;
+  for (let t = 0; t < 200; t++) {
+    const cells = [...Array(25).keys()].sort(() => Math.random() - 0.5).slice(0, 6).map(i => ({ row: Math.floor(i / 5), column: i % 5 }));
+    const c = t === 0 ? cfg : { start: cells[0], key: cells[1], door: cells[2], walls: cells.slice(3) };
+    for (const algo of ['ASTAR', 'UCS']) {
+      const e = runToEnd(c, algo);
+      if (e.expandedCount > MAX_EXPANSIONS || (e.status !== 'goal' && e.expandedCount === MAX_EXPANSIONS && e.status !== 'limit')) limitOk = false;
+    }
+  }
+  check('T6 expansions never exceed 20', limitOk);
+
+  // T7 validation
+  check('T7 default valid', validateConfig(cfg).ok);
+  check('T7 overlap rejected', !validateConfig({ ...cfg, key: { row: 0, column: 0 } }).ok);
+  check('T7 out of range rejected', !validateConfig({ ...cfg, door: { row: 5, column: 3 } }).ok);
+  check('T7 two walls rejected', !validateConfig({ ...cfg, walls: cfg.walls.slice(0, 2) }).ok);
+  check('T7 four walls rejected', !validateConfig({ ...cfg, walls: [...cfg.walls, { row: 4, column: 4 }] }).ok);
+
+  for (const r of results) console.log(`${r.pass ? 'PASS' : 'FAIL'}  ${r.name}`);
+  return results.every(r => r.pass);
+}
+// ===== LOGIC END =====
+
+// ===== UI START =====
+// DOM rendering and event handlers.
+
+const $ = id => document.getElementById(id);
+let cfg = structuredClone(DEFAULT_CONFIG);
+let engine = null;       // SearchEngine once the search has started
+let timer = null;        // Run Search interval
+let infoMessage = '';
+let errors = [];
+let logStart = 0;        // Clear Log hides the steps before this index (Copy Log still has all steps)
+
+// Inline SVG icons for the grid, legend and status boxes.
+const ICONS = {
+  robot: `<svg viewBox="0 0 32 32"><line x1="16" y1="3" x2="16" y2="7" stroke="#cfe8ff" stroke-width="2"/><circle cx="16" cy="3" r="2.2" fill="#22d3ee"/>
+    <rect x="3" y="12" width="3" height="7" rx="1.5" fill="#9fb8cf"/><rect x="26" y="12" width="3" height="7" rx="1.5" fill="#9fb8cf"/>
+    <rect x="6" y="7" width="20" height="16" rx="5" fill="#e6f1fb"/><rect x="9" y="10.5" width="14" height="8.5" rx="3.5" fill="#0b2540"/>
+    <circle cx="13" cy="14.8" r="1.9" fill="#22d3ee"/><circle cx="19" cy="14.8" r="1.9" fill="#22d3ee"/>
+    <rect x="10" y="24" width="12" height="6" rx="2" fill="#cfe0f0"/></svg>`,
+  key: `<svg viewBox="0 0 32 32" fill="none" stroke="#fbbf24" stroke-width="3.5" stroke-linecap="round"><circle cx="10" cy="22" r="6"/>
+    <path d="M14.5 17.5 26 6M21 11l3 3M24.5 7.5l3 3"/></svg>`,
+  lock: `<svg viewBox="0 0 32 32"><path d="M10 14v-4a6 6 0 0 1 12 0v4" fill="none" stroke="#fff" stroke-width="3"/>
+    <rect x="7" y="14" width="18" height="13" rx="3" fill="#fff"/><circle cx="16" cy="20.5" r="2.2" fill="#b91c1c"/></svg>`,
+  unlock: `<svg viewBox="0 0 32 32"><path d="M10 14v-4a6 6 0 0 1 11.6-2.2" fill="none" stroke="#fff" stroke-width="3"/>
+    <rect x="7" y="14" width="18" height="13" rx="3" fill="#fff"/><circle cx="16" cy="20.5" r="2.2" fill="#0f7a55"/></svg>`,
+};
+
+function readConfigFromInputs() {
+  const read = id => ($(id).value === '' ? NaN : Number($(id).value));
+  const point = p => ({ row: read(`${p}-r`), column: read(`${p}-c`) });
+  return {
+    start: point('start'), key: point('key'), door: point('door'),
+    // wall rows left completely empty are not counted (validation then requires exactly 3)
+    walls: [0, 1, 2].filter(i => $(`wall${i}-r`).value !== '' || $(`wall${i}-c`).value !== '').map(i => point(`wall${i}`)),
+  };
+}
+
+function writeConfigToInputs(c) {
+  for (const p of ['start', 'key', 'door']) { $(`${p}-r`).value = c[p].row; $(`${p}-c`).value = c[p].column; }
+  for (let i = 0; i < 3; i++) {
+    $(`wall${i}-r`).value = c.walls[i] ? c.walls[i].row : '';
+    $(`wall${i}-c`).value = c.walls[i] ? c.walls[i].column : '';
+  }
+}
+
+// " g=1 h=6 f=7" (h, f only for A*)
+function formatCosts(n, ucs) {
+  return ucs ? ` g=${n.g}` : ` g=${n.g} h=${n.h} f=${n.f}`;
+}
+
+// [UI-GRID] 5×5 grid with row/column labels, maze items, explored/fringe/current/path highlighting.
+function renderGrid(view) {
+  const cur = view.current ? view.current.state : view.fringe[0].state;
+  const explored = new Set([...view.explored].map(id => id.split(',').slice(0, 2).join(',')));
+  const inFringe = new Set(engine && engine.status === 'running' ? view.fringe.map(n => `${n.state.row},${n.state.column}`) : []);
+  const pathNums = new Map();   // cell -> step numbers on the solution path
+  (view.path || []).forEach((p, i) => {
+    const cell = `${p.state.row},${p.state.column}`;
+    if (p.action === 'Unlock Door') return;   // same cell as the previous step
+    pathNums.set(cell, [...(pathNums.get(cell) || []), i]);
+  });
+
+  let html = '<div class="label"></div>';
+  for (let column = 0; column < GRID_SIZE; column++) html += `<div class="label">${column}</div>`;
+  for (let row = 0; row < GRID_SIZE; row++) {
+    html += `<div class="label">${row}</div>`;
+    for (let column = 0; column < GRID_SIZE; column++) {
+      const cell = `${row},${column}`, cls = ['cell'];
+      let content = '';
+      const isDoor = cfg.door.row === row && cfg.door.column === column;
+      if (cfg.walls.some(w => w.row === row && w.column === column)) cls.push('wall');
+      else if (isDoor) cls.push(cur.door ? 'door-open' : 'door-locked');
+      else if (explored.has(cell)) cls.push('explored');
+      if (cfg.key.row === row && cfg.key.column === column) content += `<span class="icon${cur.key ? ' faded' : ''}">${ICONS.key}</span>`;
+      if (isDoor) content += `<span class="icon">${cur.door ? ICONS.unlock : ICONS.lock}</span>`;
+      // The robot is drawn at the current node; on the key / door cell it is drawn over the faded icon.
+      if (cur.row === row && cur.column === column) {
+        cls.push('robot');
+        content = (content ? `<span class="faded" style="display:flex;width:100%;height:100%;align-items:center;justify-content:center">${content}</span>` : '')
+          + `<span class="robot-icon"><span class="icon">${ICONS.robot}</span></span>`;
+      }
+      if (inFringe.has(cell) && !(cur.row === row && cur.column === column)) cls.push('fringe');
+      if (pathNums.has(cell)) { if (!isDoor) cls.push('path'); content += `<span class="num">${pathNums.get(cell).join(',')}</span>`; }
+      content += `<span class="letter">${cellLetter(row, column)}</span>`;
+      html += `<div class="${cls.join(' ')}">${content}</div>`;
+    }
+  }
+  $('grid').innerHTML = html;
+}
+
+// [UI-STATUS] Current position, expanded count, key / door status, search state badge.
+function renderStatus(view) {
+  const s = view.current ? view.current.state : view.fringe[0].state;
+  let badge = ['idle', 'Idle'];
+  if (engine) {
+    badge = { goal: ['goal', 'Goal reached'], limit: ['limit', 'Limit reached'], failed: ['failed', 'No solution'] }[engine.status]
+      || (timer ? ['running', 'Running'] : ['paused', 'Paused']);
+  }
+  $('state-badge').className = `badge ${badge[0]}`;
+  $('state-badge').textContent = badge[1];
+  $('pos-r').textContent = s.row;
+  $('pos-c').textContent = s.column;
+  $('expanded').textContent = view.expandedCount;
+  $('key-val').textContent = s.key ? 'Yes' : 'No';
+  $('key-val').className = `pill ${s.key ? 'yes' : 'no'}`;
+  $('door-val').textContent = s.door ? 'Open' : 'Locked';
+  $('door-val').className = `pill ${s.door ? 'open' : 'locked'}`;
+  $('door-ico').innerHTML = s.door ? ICONS.unlock.replace(/#fff/g, '#34d399') : ICONS.lock.replace(/#fff/g, '#ef4444');
+}
+
+// [UI-NODE] State and g(n); h(n), f(n) only for A*.
+function renderNodeDetails(view) {
+  const n = view.current || view.fringe[0];
+  const ucs = view.algo === 'UCS';
+  $('node-state').textContent = formatState(n.state);
+  $('node-g').textContent = n.g;
+  $('node-h').textContent = ucs ? '—' : n.h;
+  $('node-f').textContent = ucs ? '—' : n.f;
+}
+
+// [UI-FRINGE] [REQ-8] Full fringe in priority order, size, next node to expand highlighted.
+function renderFringe(view) {
+  const ucs = view.algo === 'UCS';
+  const nodes = view.fringeSorted;
+  const table = `<table class="data"><tr><th>#</th><th>State</th><th>g(n)</th><th>h(n)</th><th>f(n)</th><th>Reached by</th><th></th></tr>
+    ${nodes.map((n, i) => `<tr class="${i === 0 && view.status === 'running' ? 'next' : ''}">
+      <td>${i + 1}</td><td class="mono">${formatState(n.state)}</td><td>${n.g}</td>
+      <td>${ucs ? '—' : n.h}</td><td>${ucs ? '—' : n.f}</td><td>${n.action}</td>
+      <td>${i === 0 && view.status === 'running' ? 'next to expand' : ''}</td></tr>`).join('')}</table>`;
+  if (view.status === 'goal') {
+    // Goal reached: show the solution and the expansion order, then the nodes left unexpanded in the fringe.
+    // Expansion order as cell letters; "(with key)" = state with the key collected, Unlock = goal state.
+    const order = view.log.map(rec => rec.node.door ? 'Unlock' : cellLetter(rec.node.row, rec.node.column) + (rec.node.key ? ' (with key)' : ''));
+    $('fringe-size').textContent = `— search finished, ${nodes.length} node(s) left unexpanded`;
+    $('fringe').innerHTML = `<div class="banner goal"><b>Goal state reached — door opened at step ${view.expandedCount}.</b>
+      <p><b>Solution path:</b> <span class="mono" style="white-space:normal">${formatPath(view.path.map(p => p.state))}</span> – cost ${view.path.at(-1).g} <span class="muted">(${KEY_MARK_NOTE})</span></p>
+      <p><b>Expanded nodes (${order.length}):</b> <span class="mono" style="white-space:normal">${order.join(' → ')}</span></p></div>
+      <p class="muted" style="margin:10px 0 6px;font-size:12px">Nodes left in the fringe (never expanded):</p>
+      ${nodes.length ? table : '<div class="empty">— empty</div>'}`;
+    return;
+  }
+  $('fringe-size').textContent = `— size ${nodes.length} — ordered by ${ucs ? 'g(n)' : 'f(n)'}, ties alphabetical`;
+  $('fringe').innerHTML = table;
+}
+
+// [UI-LOG] [REQ-6] One row per expansion with alternatives considered, notes and the fringe after that step.
+function renderLog(view) {
+  const ucs = view.algo === 'UCS';
+  const shown = view.log.slice(logStart);
+  $('log-count').textContent = `Showing ${shown.length} of ${view.log.length} steps`;
+  $('log').innerHTML = `<table class="data"><tr><th>Step</th><th>Expanded Node</th><th>g(n)</th><th>h(n)</th><th>f(n)</th>
+    <th>Action</th><th>Alternatives considered</th><th>Notes</th><th>Fringe after step</th></tr>
+    ${shown.length ? '' : '<tr><td colspan="9" class="empty">No steps yet — press Next Step or Run Search.</td></tr>'}
+    ${shown.map(rec => `<tr><td>${rec.step}</td><td class="mono">${formatState(rec.node)}</td><td>${rec.g}</td>
+      <td>${ucs ? '—' : rec.h}</td><td>${ucs ? '—' : rec.f}</td><td>${rec.action}</td>
+      <td class="alt">${rec.successors.map(x => `<div>${x.action} → ${formatState(x.state)}${formatCosts(x, ucs)} [${x.status}]</div>`).join('')}
+        ${rec.blocked.map(b => `<div class="blocked">${b.action} → blocked (${b.reason})</div>`).join('')}
+        ${rec.successors.length + rec.blocked.length === 0 ? '<div class="blocked">— (goal, not expanded)</div>' : ''}</td>
+      <td>${rec.notes.join('; ')}</td>
+      <td class="alt"><div class="fringe-box"><b>Fringe (${rec.fringeSize})</b>
+        ${rec.fringeSnapshot.map(n => `<div>${formatState(n.state)}${formatCosts(n, ucs)}</div>`).join('') || '<div class="blocked">— empty</div>'}</div></td></tr>`).join('')}</table>`;
+  $('log').scrollTop = $('log').scrollHeight;
+}
+
+// Path as cell letters, e.g. "AFKLMHIDE*DIN→Unlock"; * marks where the key is collected (see KEY_MARK_NOTE).
+const KEY_MARK_NOTE = '* = key collected';
+function formatPath(states) {
+  return states.map((s, i) => {
+    const prev = states[i - 1];
+    if (prev && s.door && !prev.door) return '→Unlock';
+    return `${cellLetter(s.row, s.column)}${prev && s.key && !prev.key ? '*' : ''}`;
+  }).join('');
+}
+
+// [REQ-6] [REQ-8] Trace table in the class-notes format: Step | Fringe (path - cost) | Expanded.
+// The fringe is shown BEFORE the step; its first entry (highlighted) is the node expanded in that step.
+// Cost = f(n) for A*, g(n) for UCS.
+function renderTrace(view) {
+  const ucs = view.algo === 'UCS';
+  $('trace-desc').textContent = `— Step | Fringe (path – ${ucs ? 'g(n)' : 'f(n)'}) | Expanded  ·  ${KEY_MARK_NOTE}`;
+  if (!view.log.length) {
+    $('trace').innerHTML = '<div class="empty">No steps yet.</div>';
+    return;
+  }
+  let html = `<table class="data"><tr><th>Step</th><th>Fringe</th><th>Expanded</th></tr>
+    ${view.log.map(rec => `<tr><td>${rec.step}</td>
+      <td>${rec.fringeBefore.map((n, i) => `<span class="trace-entry${i === 0 ? ' first' : ''}">${formatPath(n.path)} – ${ucs ? n.g : n.f}</span>`).join(', ')}</td>
+      <td class="mono">${formatState(rec.node)}${rec.node.door ? ' <b>goal</b>' : ''}</td></tr>`).join('')}</table>`;
+  if (view.status === 'goal') {
+    html += `<p style="margin:0;padding:10px;border-top:1px solid var(--border)"><b>Solution:</b> <span class="mono" style="white-space:normal">${formatPath(view.path.map(p => p.state))}</span> – <b>cost ${view.path.at(-1).g}</b></p>`;
+  }
+  $('trace').innerHTML = html;
+}
+
+// [UI-RESULT] [REQ-5] Validation errors, info messages, goal / limit / no-solution banners.
+function renderResult() {
+  let html = '<div class="panel-head"><h2>Result</h2></div>';
+  if (errors.length) html += `<div class="banner error"><b>Invalid configuration — search not started.</b><ul>${errors.map(e => `<li>${e}</li>`).join('')}</ul></div>`;
+  if (infoMessage) html += `<div class="banner info">${infoMessage}</div>`;
+  if (engine && engine.status === 'goal') {
+    // Short summary only; the solution path itself is shown in the Fringe panel and the Solution Trace.
+    html += `<div class="banner goal"><b>Door opened! Solution found — total cost ${engine.path.at(-1).g}, ${engine.expandedCount} nodes expanded.</b>
+      <p>See the Fringe panel for the solution path.</p></div>`;
+  } else if (engine && engine.status !== 'running') {
+    html += `<div class="banner ${engine.status}"><b>${engine.message}</b></div>`;
+  } else if (!errors.length && !infoMessage) {
+    html += `<p class="muted" style="margin:0">${engine ? 'Search in progress…' : 'Press Next Step or Run Search to start.'}</p>`;
+  }
+  $('result').innerHTML = html;
+}
+
+function renderAll() {
+  // Before the search starts, a preview engine shows the initial state (fringe = start node).
+  const view = engine || new SearchEngine(cfg, $('algo').value);
+  renderGrid(view);
+  renderStatus(view);
+  renderNodeDetails(view);
+  renderFringe(view);
+  renderLog(view);
+  renderTrace(view);
+  renderResult();
+  const finished = engine && engine.status !== 'running';
+  $('btn-next').disabled = !!timer || finished;
+  $('btn-run').disabled = finished;
+  $('run-title').textContent = timer ? 'Pause' : 'Run Search';
+  $('btn-copy').disabled = !engine;
+  $('btn-clear').disabled = !engine || logStart >= engine.log.length;
+  const ucs = $('algo').value === 'UCS';
+  $('algo-title').textContent = ucs ? 'Uniform Cost Search' : 'A* Search';
+  $('algo-desc').textContent = ucs ? 'Expands the fringe node with the lowest path cost g(n).'
+    : 'Uses f(n) = g(n) + h(n) to find an optimal path efficiently.';
+  // Inputs are locked while a search exists (until Reset).
+  document.querySelectorAll('#config input, #config button, #algo').forEach(el => { el.disabled = !!engine; });
+}
+
+// Validates the configuration and creates the engine (locks the inputs). Returns false if invalid.
+function startEngine() {
+  if (engine) return true;
+  cfg = readConfigFromInputs();
+  errors = validateConfig(cfg).errors;
+  if (!errors.length) engine = new SearchEngine(structuredClone(cfg), $('algo').value);
+  renderAll();
+  return !!engine;
+}
+
+// [REQ-7] Next Step: exactly one expansion.
+function onNextStep() {
+  if (timer || !startEngine()) return;
+  infoMessage = '';
+  engine.step();
+  renderAll();
+}
+
+// [UI-CTRL] Run Search: animated, expands until the goal is reached or 20 expansions (engine stops itself).
+function onRunSearch() {
+  if (timer) {   // acts as Pause while running
+    clearInterval(timer);
+    timer = null;
+    renderAll();
+    return;
+  }
+  if (!startEngine()) return;
+  infoMessage = '';
+  timer = setInterval(() => {
+    engine.step();
+    if (engine.status !== 'running') {
+      clearInterval(timer);
+      timer = null;
+    }
+    renderAll();
+  }, 400);
+  renderAll();
+}
+
+// [UI-CTRL] Reset: stop the timer, clear the search, keep the maze configuration.
+function onReset() {
+  clearInterval(timer);
+  timer = null;
+  engine = null;
+  logStart = 0;
+  infoMessage = '';
+  errors = [];
+  renderAll();
+}
+
+function onLoadExample() {
+  if (engine) return;
+  cfg = structuredClone(DEFAULT_CONFIG);
+  writeConfigToInputs(cfg);
+  errors = [];
+  renderAll();
+}
+
+
+// Copies the full log (with fringe snapshots) as plain text to the clipboard.
+function onCopyLog() {
+  if (!engine) return;
+  const ucs = engine.algo === 'UCS';
+  const c = engine.cfg;
+  const lines = [
+    `Key Maze Search Log — ${ucs ? 'Uniform Cost Search (UCS)' : 'A* Search'}`,
+    `Start (${c.start.row}, ${c.start.column})  Key (${c.key.row}, ${c.key.column})  Door (${c.door.row}, ${c.door.column})  Walls ${c.walls.map(w => `(${w.row}, ${w.column})`).join(' ')}`,
+    '',
+    'Step | Expanded Node | g(n) | h(n) | f(n) | Action | Notes',
+  ];
+  for (const rec of engine.log) {
+    lines.push(`${rec.step} | ${formatState(rec.node)} | ${rec.g} | ${ucs ? '—' : rec.h} | ${ucs ? '—' : rec.f} | ${rec.action} | ${rec.notes.join('; ')}`);
+    for (const x of rec.successors) lines.push(`    ${x.action} → ${formatState(x.state)}${formatCosts(x, ucs)} [${x.status}]`);
+    for (const b of rec.blocked) lines.push(`    ${b.action} → blocked (${b.reason})`);
+    lines.push(`    Fringe after step ${rec.step} (size ${rec.fringeSize}): ${rec.fringeSnapshot.map(n => formatState(n.state) + formatCosts(n, ucs)).join('; ') || 'empty'}`);
+  }
+  lines.push('', `Solution trace — Step | Fringe (path - ${ucs ? 'g' : 'f'}) | Expanded   (${KEY_MARK_NOTE})`);
+  for (const rec of engine.log) {
+    lines.push(`${rec.step} | ${rec.fringeBefore.map(n => `${formatPath(n.path)} - ${ucs ? n.g : n.f}`).join(', ')} | ${formatState(rec.node)}${rec.node.door ? ' goal' : ''}`);
+  }
+  lines.push('');
+  if (engine.status === 'goal') {
+    lines.push(`Result: Door opened! Solution found. Total cost: ${engine.path.at(-1).g}, nodes expanded: ${engine.expandedCount}`);
+    lines.push(`Path: ${engine.path.map((x, i) => (i ? ` —${x.action}→ ` : '') + formatState(x.state)).join('')}`);
+  } else {
+    lines.push(`Result: ${engine.message || 'Search in progress'} (nodes expanded: ${engine.expandedCount})`);
+  }
+  const text = lines.join('\n');
+  const done = () => { infoMessage = 'Log copied to clipboard.'; renderAll(); };
+  navigator.clipboard.writeText(text).then(done, () => {
+    // Fallback for browsers that block the async clipboard API on file:// pages.
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+    done();
+  });
+}
+
+// Event wiring
+$('btn-next').addEventListener('click', onNextStep);
+$('btn-run').addEventListener('click', onRunSearch);
+$('btn-reset').addEventListener('click', onReset);
+$('btn-example').addEventListener('click', onLoadExample);
+$('btn-copy').addEventListener('click', onCopyLog);
+$('btn-clear').addEventListener('click', () => {   // hides the current rows; the search itself continues
+  if (engine) logStart = engine.log.length;
+  renderAll();
+});
+document.querySelectorAll('[data-icon]').forEach(el => { el.innerHTML = ICONS[el.dataset.icon]; });
+$('algo').addEventListener('change', renderAll);
+document.querySelectorAll('#config input').forEach(el => el.addEventListener('input', () => {
+  cfg = readConfigFromInputs();
+  errors = [];
+  renderAll();
+}));
+
+writeConfigToInputs(cfg);
+renderAll();
+runSelfTests();
+// ===== UI END =====
+</script>
+</body>
+</html>
