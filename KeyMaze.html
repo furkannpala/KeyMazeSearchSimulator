@@ -6,26 +6,42 @@
 <title>Key Maze Search Simulator</title>
 <style>
   :root {
-    --bg: #06111f; --panel: rgba(12, 31, 54, .88); --panel-2: #0c2238; --border: #1a3a5c; --border-hi: #24527d;
-    --cell: #0e2742; --cell-border: #1c4168; --text: #e3eef9; --muted: #7d9abb;
-    --cyan: #22d3ee; --teal: #14b8a6; --gold: #f5b021; --green: #34d399; --red: #ef4444; --orange: #fb923c;
+    --bg: #0f1012; --panel: rgba(24, 26, 30, .9); --panel-2: #1d2025; --border: #2c3037; --border-hi: #444a54;
+    --cell: #1f2227; --cell-border: #343941; --text: #f3f1ee; --muted: #9a9890; --soft: #dcd8d2; --subtle: #bdb8b0;
+    --field: #141518; --raised: #262a30; --explored: #4a2f2a;
+    --accent: #ff7a5c; --accent-2: #ffb86b; --gold: #f5b021; --green: #34d399; --red: #ef4444; --orange: #fb923c;
   }
   * { box-sizing: border-box; }
   body { margin: 0; color: var(--text); font: 14px/1.45 "Segoe UI", system-ui, Arial, sans-serif;
-         background: radial-gradient(ellipse at 20% 0%, #0f2c4d 0%, transparent 55%),
-                     radial-gradient(ellipse at 90% 100%, #0b2a3f 0%, transparent 50%), var(--bg);
+         background: radial-gradient(ellipse at 20% 0%, #2a1d19 0%, transparent 55%),
+                     radial-gradient(ellipse at 90% 100%, #1d2226 0%, transparent 50%), var(--bg);
          min-height: 100vh; }
   .muted { color: var(--muted); }
   .mono { font-family: Consolas, "Courier New", monospace; white-space: nowrap; }
 
   /* Header */
-  header { display: flex; align-items: center; gap: 14px; padding: 14px 24px; border-bottom: 1px solid var(--border);
-           background: linear-gradient(90deg, rgba(34, 211, 238, .08), transparent 60%); }
-  header svg { width: 42px; height: 42px; flex: none; filter: drop-shadow(0 0 6px rgba(34, 211, 238, .5)); }
-  header h1 { margin: 0; font: 600 26px/1.1 Bahnschrift, "Segoe UI", sans-serif; letter-spacing: .5px; }
-  header h1 b { color: var(--cyan); font-weight: 700; text-shadow: 0 0 12px rgba(34, 211, 238, .45); }
-  header h1 span { color: #c9d8ea; font-weight: 400; }
-  header p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+  header { position: relative; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 16px 24px;
+           border-bottom: 1px solid var(--border); background: linear-gradient(100deg, rgba(255, 122, 92, .10), rgba(255, 184, 107, .04) 45%, transparent 75%); }
+  header::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px;
+                  background: linear-gradient(90deg, transparent, var(--accent) 30%, var(--accent-2) 60%, transparent); opacity: .6; }
+  .logo { width: 52px; height: 52px; flex: none; display: grid; place-items: center; border-radius: 14px;
+          background: linear-gradient(150deg, #3a2620, #1a1614); border: 1px solid var(--border-hi);
+          box-shadow: 0 0 0 4px rgba(255, 122, 92, .06), 0 0 18px rgba(255, 122, 92, .25); }
+  .logo svg { width: 34px; height: 34px; }
+  header h1 { margin: 0; font: 700 26px/1.1 Bahnschrift, "Segoe UI", sans-serif; letter-spacing: .5px; }
+  header h1 b { background: linear-gradient(90deg, var(--accent), var(--accent-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  header h1 span { color: var(--soft); font-weight: 400; }
+  .steps { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12.5px; color: var(--muted); }
+  .step { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 4px; border-radius: 999px;
+          background: var(--panel-2); border: 1px solid var(--border); }
+  .step [data-icon] { width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; background: var(--field); }
+  .step [data-icon] svg { width: 14px; height: 14px; }
+  .step.door [data-icon] { background: #9f1d22; }
+  .step [data-icon]:not([data-icon=lock]) { background: var(--field); }
+  .tags { margin-left: auto; display: flex; gap: 8px; }
+  .tag { padding: 5px 12px; border-radius: 8px; font: 600 12px Consolas, monospace; color: var(--accent);
+           border: 1px solid rgba(255, 122, 92, .35); background: rgba(255, 122, 92, .08); }
+  @media (max-width: 640px) { header { padding: 14px 16px; } header h1 { font-size: 21px; } .tags { margin-left: 0; } }
 
   main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; padding: 16px 24px 24px; max-width: 1440px; margin: 0 auto; }
   .full { grid-column: 1 / -1; }
@@ -35,15 +51,15 @@
            box-shadow: 0 8px 24px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .03); min-width: 0; }
   .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
   .panel h2 { margin: 0; font: 600 16px Bahnschrift, "Segoe UI", sans-serif; letter-spacing: .3px; }
-  .label-sm { display: block; font-size: 12px; color: #a9c0da; margin-bottom: 4px; }
+  .label-sm { display: block; font-size: 12px; color: var(--subtle); margin-bottom: 4px; }
   .box { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
-  .field { background: #081a2d; border: 1px solid var(--border-hi); border-radius: 6px; padding: 7px 10px; font-weight: 600; min-height: 34px; }
+  .field { background: var(--field); border: 1px solid var(--border-hi); border-radius: 6px; padding: 7px 10px; font-weight: 600; min-height: 34px; }
 
   /* Maze grid + legend */
   .maze-wrap { display: flex; gap: 20px; flex-wrap: wrap; }
   #grid { display: grid; grid-template-columns: 20px repeat(5, 64px); grid-template-rows: 20px repeat(5, 64px); gap: 5px; }
   @media (max-width: 480px) { #grid { grid-template-columns: 16px repeat(5, 52px); grid-template-rows: 16px repeat(5, 52px); } }
-  .label { display: flex; align-items: center; justify-content: center; color: #a9c0da; font-size: 12px; font-weight: 600; }
+  .label { display: flex; align-items: center; justify-content: center; color: var(--subtle); font-size: 12px; font-weight: 600; }
   .cell { position: relative; display: flex; align-items: center; justify-content: center; user-select: none;
           background: var(--cell); border: 1px solid var(--cell-border); border-radius: 6px; transition: background .2s, box-shadow .2s; }
   .cell .icon { display: flex; width: 70%; height: 70%; }
@@ -55,10 +71,10 @@
                border-color: #2d3139; box-shadow: inset 0 0 0 2px rgba(0, 0, 0, .35), inset 0 -4px 8px rgba(0, 0, 0, .4); }
   .cell.door-locked { background: linear-gradient(160deg, #e5484d, #9f1d22); border-color: #f87171; box-shadow: 0 0 14px rgba(239, 68, 68, .45); }
   .cell.door-open { background: linear-gradient(160deg, #22c58b, #0f7a55); border-color: var(--green); box-shadow: 0 0 14px rgba(52, 211, 153, .5); }
-  .cell.explored { background: #143a5f; }
+  .cell.explored { background: var(--explored); }
   .cell.path { background: #11473a; border-color: #1f8a68; }
-  .cell.fringe { border: 2px dashed var(--cyan); }
-  .cell.robot { border: 2px solid var(--cyan); box-shadow: 0 0 14px rgba(34, 211, 238, .55), inset 0 0 10px rgba(34, 211, 238, .2); }
+  .cell.fringe { border: 2px dashed var(--accent); }
+  .cell.robot { border: 2px solid var(--accent); box-shadow: 0 0 14px rgba(255, 122, 92, .55), inset 0 0 10px rgba(255, 122, 92, .2); }
   .cell.current { border: 2px solid var(--gold); box-shadow: 0 0 14px rgba(245, 176, 33, .55); }
   .cell .num { position: absolute; top: 2px; left: 5px; font-size: 10px; font-weight: 700; color: var(--green); }
   .cell .letter { position: absolute; bottom: 2px; right: 5px; font-size: 11px; font-weight: 600; color: var(--text); opacity: .3; pointer-events: none; }
@@ -66,8 +82,8 @@
   .faded { opacity: .25; }
 
   .legend { border-left: 1px solid var(--border); padding-left: 18px; display: flex; flex-direction: column; gap: 10px; min-width: 170px; }
-  .legend h3 { margin: 0 0 2px; font-size: 13px; font-weight: 600; color: #c9d8ea; }
-  .lg { display: flex; align-items: center; gap: 10px; font-size: 12px; color: #c9d8ea; line-height: 1.2; }
+  .legend h3 { margin: 0 0 2px; font-size: 13px; font-weight: 600; color: var(--soft); }
+  .lg { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--soft); line-height: 1.2; }
   .lg small { display: block; color: var(--muted); font-size: 11px; }
   .lg .ico { width: 30px; height: 30px; flex: none; border-radius: 6px; display: flex; align-items: center; justify-content: center;
              background: var(--cell); border: 1px solid var(--cell-border); }
@@ -75,10 +91,10 @@
   .legend .sep { border-top: 1px solid var(--border); margin: 2px 0; }
 
   /* Controls */
-  select { width: 100%; padding: 9px 10px; background: #081a2d; color: var(--text); border: 1px solid var(--border-hi); border-radius: 6px; font: inherit; }
+  select { width: 100%; padding: 9px 10px; background: var(--field); color: var(--text); border: 1px solid var(--border-hi); border-radius: 6px; font: inherit; }
   .algo-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; margin-bottom: 14px; align-items: end; }
-  .algo-info b { color: var(--cyan); display: block; }
-  .algo-info span { font-size: 12px; color: #a9c0da; }
+  .algo-info b { color: var(--accent); display: block; }
+  .algo-info span { font-size: 12px; color: var(--subtle); }
   .status-row { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 12px; margin-bottom: 14px; }
   @media (max-width: 560px) { .status-row, .algo-row { grid-template-columns: minmax(0, 1fr); } }
   .pos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -88,7 +104,7 @@
   .big-num small { font-size: 14px; color: var(--muted); font-weight: 400; text-shadow: none; }
   .kd { display: grid; grid-template-columns: auto 1fr; gap: 6px 8px; align-items: center; font-size: 12px; }
   .kd svg { width: 20px; height: 20px; }
-  .pill { display: inline-block; padding: 1px 10px; border-radius: 5px; font-weight: 700; font-size: 12px; background: #081a2d; border: 1px solid var(--border-hi); text-align: center; }
+  .pill { display: inline-block; padding: 1px 10px; border-radius: 5px; font-weight: 700; font-size: 12px; background: var(--field); border: 1px solid var(--border-hi); text-align: center; }
   .pill.no, .pill.locked { color: #fca5a5; }
   .pill.yes, .pill.open { color: var(--green); }
 
@@ -100,27 +116,27 @@
   .bigbtn b { display: block; font-size: 15px; }
   .bigbtn small { display: block; font-size: 11px; opacity: .8; }
   .bigbtn:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.12); }
-  .bigbtn.run { background: linear-gradient(160deg, #0f766e, #155e75); border-color: #2dd4bf; box-shadow: 0 0 16px rgba(45, 212, 191, .3); }
+  .bigbtn.run { background: linear-gradient(160deg, #e8553a, #b8324f); border-color: var(--accent); box-shadow: 0 0 16px rgba(255, 122, 92, .3); }
   .bigbtn.next { background: linear-gradient(160deg, #b7791f, #92400e); border-color: #fbbf24; box-shadow: 0 0 16px rgba(251, 191, 36, .3); }
   .bigbtn.next b { color: #fde68a; }
-  .bigbtn.reset { background: #0e2440; border-color: var(--border-hi); }
+  .bigbtn.reset { background: var(--raised); border-color: var(--border-hi); }
   button:disabled, input:disabled, select:disabled { opacity: .4; cursor: not-allowed; }
   .node-row { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr; gap: 10px; }
   @media (max-width: 560px) { .node-row { grid-template-columns: 1fr 1fr; } }
 
-  .badge { display: inline-block; padding: 3px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; background: #1b3352; color: #c9d8ea; }
-  .badge.running { background: var(--cyan); color: #00222b; }
+  .badge { display: inline-block; padding: 3px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; background: #33373e; color: var(--soft); }
+  .badge.running { background: var(--accent); color: #2b0d05; }
   .badge.paused { background: var(--gold); color: #2b1a00; }
   .badge.goal { background: var(--green); color: #00281b; }
   .badge.limit { background: var(--orange); color: #2b1100; }
   .badge.failed { background: var(--red); color: #fff; }
 
   /* Small buttons + setup */
-  .btn { padding: 7px 12px; background: #0e2440; color: var(--text); border: 1px solid var(--border-hi); border-radius: 6px; cursor: pointer; font: inherit; font-size: 13px; }
-  .btn:hover:not(:disabled) { border-color: var(--cyan); }
+  .btn { padding: 7px 12px; background: var(--raised); color: var(--text); border: 1px solid var(--border-hi); border-radius: 6px; cursor: pointer; font: inherit; font-size: 13px; }
+  .btn:hover:not(:disabled) { border-color: var(--accent); }
   .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
   table.cfg td { padding: 3px 6px; }
-  input[type=number] { width: 60px; padding: 5px; background: #081a2d; color: var(--text); border: 1px solid var(--border-hi); border-radius: 5px; }
+  input[type=number] { width: 60px; padding: 5px; background: var(--field); color: var(--text); border: 1px solid var(--border-hi); border-radius: 5px; }
 
   /* Result banners */
   .banner { padding: 10px 12px; border-radius: 8px; }
@@ -129,35 +145,44 @@
   .banner.goal { background: rgba(52, 211, 153, .12); border: 1px solid var(--green); }
   .banner.limit { background: rgba(251, 146, 60, .12); border: 1px solid var(--orange); }
   .banner.failed, .banner.error { background: rgba(239, 68, 68, .12); border: 1px solid var(--red); }
-  .banner.info { background: rgba(34, 211, 238, .1); border: 1px solid var(--cyan); }
+  .banner.info { background: rgba(255, 122, 92, .1); border: 1px solid var(--accent); }
   .banner ul { margin: 4px 0 0; padding-left: 20px; }
 
   /* Tables */
   .scroll { overflow: auto; max-height: 460px; border: 1px solid var(--border); border-radius: 8px; }
   table.data { width: 100%; border-collapse: collapse; font-size: 13px; }
   table.data th, table.data td { padding: 7px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
-  table.data th { position: sticky; top: 0; z-index: 1; background: #0f2a47; color: #a9c0da; font-weight: 600; font-size: 12px; }
-  table.data tr:hover td { background: rgba(34, 211, 238, .04); }
+  table.data th { position: sticky; top: 0; z-index: 1; background: var(--raised); color: var(--subtle); font-weight: 600; font-size: 12px; }
+  table.data tr:hover td { background: rgba(255, 122, 92, .04); }
   table.data tr.next td { background: rgba(245, 176, 33, .12); }
   .empty { padding: 18px; color: var(--muted); text-align: center; }
   .alt div { white-space: nowrap; font-family: Consolas, "Courier New", monospace; font-size: 12px; }
   .alt .blocked { color: var(--muted); }
   .fringe-box { background: var(--panel-2); border: 1px solid var(--border-hi); border-radius: 6px; padding: 6px 8px; }
-  .fringe-box b { display: block; font-size: 12px; margin-bottom: 2px; color: #c9d8ea; }
+  .fringe-box b { display: block; font-size: 12px; margin-bottom: 2px; color: var(--soft); }
   .trace-entry { display: inline-block; margin: 1px 0; font-family: Consolas, "Courier New", monospace; font-size: 12px; white-space: nowrap; }
   .trace-entry.first { color: var(--gold); font-weight: bold; }
 </style>
 </head>
 <body>
 <header>
-  <svg viewBox="0 0 40 40" fill="none" stroke="#22d3ee" stroke-width="2.5" stroke-linecap="round">
-    <rect x="3" y="3" width="34" height="34" rx="4"/>
-    <path d="M10 3v10h8M3 20h8v10M18 37V26h8M26 13V20h11M18 13v6"/>
-  </svg>
+  <div class="logo" aria-hidden="true">
+    <svg viewBox="0 0 40 40" fill="none" stroke="url(#logo-g)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <defs><linearGradient id="logo-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff7a5c"/><stop offset="1" stop-color="#ffb86b"/></linearGradient></defs>
+      <circle cx="13" cy="13" r="8.5"/>
+      <path d="M9.5 13h3.5v-3.5M16.5 13v3.5"/>
+      <path d="M19 19l15 15M27 27l-4 4M31 31l-3 3"/>
+    </svg>
+  </div>
   <div>
     <h1><b>KEY MAZE</b> <span>— Search Simulator</span></h1>
-    <p>Collect the key, then unlock the door.</p>
+    <div class="steps">
+      <span class="step"><span data-icon="key"></span>Collect the key</span>
+      <span aria-hidden="true">→</span>
+      <span class="step door"><span data-icon="lock"></span>Unlock the door</span>
+    </div>
   </div>
+  <div class="tags"><span class="tag">UCS</span><span class="tag">A*</span></div>
 </header>
 
 <main>
@@ -175,8 +200,8 @@
         <div class="lg"><span class="ico stone"></span><div>Wall<small>blocked</small></div></div>
         <div class="lg"><span class="ico"></span><div>Empty cell<small>free</small></div></div>
         <div class="sep"></div>
-        <div class="lg"><span class="ico" style="background:#143a5f"></span><div>Explored</div></div>
-        <div class="lg"><span class="ico" style="border:2px dashed #22d3ee"></span><div>In fringe</div></div>
+        <div class="lg"><span class="ico" style="background:var(--explored)"></span><div>Explored</div></div>
+        <div class="lg"><span class="ico" style="border:2px dashed var(--accent)"></span><div>In fringe</div></div>
         <div class="lg"><span class="ico" style="background:#11473a;border-color:#1f8a68"></span><div>Solution path</div></div>
       </div>
     </div>
@@ -206,7 +231,7 @@
         </div>
       </div>
       <div class="box big-stat">
-        <svg viewBox="0 0 32 32" fill="none" stroke="#7dd3fc" stroke-width="2"><circle cx="16" cy="6" r="3.5" fill="#22d3ee"/><circle cx="7" cy="25" r="3.5"/><circle cx="25" cy="25" r="3.5"/><path d="M14 9 8.5 22M18 9l5.5 13"/></svg>
+        <svg viewBox="0 0 32 32" fill="none" stroke="#ffc2b0" stroke-width="2"><circle cx="16" cy="6" r="3.5" fill="#ff7a5c"/><circle cx="7" cy="25" r="3.5"/><circle cx="25" cy="25" r="3.5"/><path d="M14 9 8.5 22M18 9l5.5 13"/></svg>
         <div><span class="label-sm">Nodes Expanded</span><div class="big-num"><span id="expanded"></span> <small>/ 20</small></div></div>
       </div>
       <div class="box kd">
@@ -217,7 +242,7 @@
 
     <div class="btn-row">
       <button class="bigbtn run" id="btn-run">
-        <svg viewBox="0 0 24 24" fill="#5eead4"><path d="M6 4l14 8-14 8z"/></svg>
+        <svg viewBox="0 0 24 24" fill="#ffd29e"><path d="M6 4l14 8-14 8z"/></svg>
         <span><b id="run-title">Run Search</b><small>Until door opens (max 20)</small></span>
       </button>
       <button class="bigbtn next" id="btn-next">
@@ -225,12 +250,12 @@
         <span><b>Next Step</b><small>Expand one node</small></span>
       </button>
       <button class="bigbtn reset" id="btn-reset">
-        <svg viewBox="0 0 24 24" fill="none" stroke="#e3eef9" stroke-width="2.4" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.4-5.7M20 4v5h-5"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="#f3f1ee" stroke-width="2.4" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.4-5.7M20 4v5h-5"/></svg>
         <span><b>Reset</b><small>Clear and start over</small></span>
       </button>
     </div>
 
-    <span class="label-sm" style="font-size:13px;font-weight:600;color:#e3eef9">Current Node Details</span>
+    <span class="label-sm" style="font-size:13px;font-weight:600;color:var(--text)">Current Node Details</span>
     <div class="node-row">
       <div><span class="label-sm">State</span><div class="field mono" id="node-state"></div></div>
       <div><span class="label-sm">g(n)</span><div class="field" id="node-g"></div></div>
@@ -391,14 +416,15 @@ function validateConfig(cfg) {
   return { ok: errors.length === 0, errors };
 }
 
-// [REQ-4] h(n): without the key -> distance to key + distance from key to door;
-// with the key -> distance to door; goal -> 0.
-// Admissible: Manhattan distance never overestimates (walls are ignored) and the
-// final Unlock Door cost of 1 is not counted, so h(n) <= true remaining cost.
+// [REQ-4] h(n): without the key -> distance to key + distance from key to door + 1 (Unlock);
+// with the key -> distance to door + 1 (Unlock); goal -> 0.
+// Admissible: Manhattan distance never overestimates (walls are ignored) and the Unlock Door
+// action (cost 1) is required on every path to the goal, so h(n) <= true remaining cost.
+// Consistent: a move changes h by at most 1, and Unlock lowers h from 1 to 0 at cost 1.
 function heuristic(s, cfg) {
   if (s.door) return 0;                                   // goal
-  if (!s.key) return manhattan(s, cfg.key) + manhattan(cfg.key, cfg.door);
-  return manhattan(s, cfg.door);
+  if (!s.key) return manhattan(s, cfg.key) + manhattan(cfg.key, cfg.door) + 1;
+  return manhattan(s, cfg.door) + 1;
 }
 
 // [REQ-MOVE] [REQ-KEY] Successor function.
@@ -565,8 +591,9 @@ function runSelfTests() {
   const ids = (s, c) => getSuccessors(s, c).successors.map(x => stateId(x.state));
 
   // T1 heuristic
-  check('T1 h(0,0,F,F) = 7', heuristic(makeState(0, 0, false, false), cfg) === 7);
-  check('T1 h(0,4,T,F) = 3', heuristic(makeState(0, 4, true, false), cfg) === 3);
+  check('T1 h(0,0,F,F) = 8', heuristic(makeState(0, 0, false, false), cfg) === 8);
+  check('T1 h(0,4,T,F) = 4', heuristic(makeState(0, 4, true, false), cfg) === 4);
+  check('T1 h(2,3,T,F) = 1', heuristic(makeState(2, 3, true, false), cfg) === 1);
   check('T1 h(2,3,T,T) = 0', heuristic(makeState(2, 3, true, true), cfg) === 0);
 
   // T2 locked door
@@ -581,10 +608,10 @@ function runSelfTests() {
   // T4 easy A* scenario
   const easy = { start: { row: 4, column: 0 }, key: { row: 4, column: 2 }, door: { row: 4, column: 4 }, walls: [{ row: 0, column: 0 }, { row: 0, column: 1 }, { row: 0, column: 2 }] };
   const e4 = runToEnd(easy, 'ASTAR');
-  const expected = [['4,0,0,0', 0, 4], ['4,1,0,0', 1, 4], ['4,2,1,0', 2, 4], ['4,3,1,0', 3, 4], ['4,4,1,0', 4, 4], ['4,4,1,1', 5, 5]];
+  const expected = [['4,0,0,0', 0, 5], ['4,1,0,0', 1, 5], ['4,2,1,0', 2, 5], ['4,3,1,0', 3, 5], ['4,4,1,0', 4, 5], ['4,4,1,1', 5, 5]];
   check('T4 expansion sequence', e4.log.length === 6 && expected.every(([id, g, f], i) =>
     stateId(e4.log[i].node) === id && e4.log[i].g === g && e4.log[i].f === f));
-  check('T4 h(start) = 4', e4.log[0].h === 4);
+  check('T4 h(start) = 5', e4.log[0].h === 5);
   check('T4 notes', e4.log[2].notes.includes('Key collected') && e4.log[4].notes.includes('Unlock Door action available'));
   check('T4 goal, cost 5, 6 expansions', e4.status === 'goal' && e4.path.at(-1).g === 5 && e4.expandedCount === 6);
   check('T4 path actions', e4.path.slice(1).map(p => p.action).join(',') === 'Right,Right,Right,Right,Unlock Door');
@@ -633,11 +660,11 @@ let logStart = 0;        // Clear Log hides the steps before this index (Copy Lo
 
 // Inline SVG icons for the grid, legend and status boxes.
 const ICONS = {
-  robot: `<svg viewBox="0 0 32 32"><line x1="16" y1="3" x2="16" y2="7" stroke="#cfe8ff" stroke-width="2"/><circle cx="16" cy="3" r="2.2" fill="#22d3ee"/>
-    <rect x="3" y="12" width="3" height="7" rx="1.5" fill="#9fb8cf"/><rect x="26" y="12" width="3" height="7" rx="1.5" fill="#9fb8cf"/>
-    <rect x="6" y="7" width="20" height="16" rx="5" fill="#e6f1fb"/><rect x="9" y="10.5" width="14" height="8.5" rx="3.5" fill="#0b2540"/>
-    <circle cx="13" cy="14.8" r="1.9" fill="#22d3ee"/><circle cx="19" cy="14.8" r="1.9" fill="#22d3ee"/>
-    <rect x="10" y="24" width="12" height="6" rx="2" fill="#cfe0f0"/></svg>`,
+  robot: `<svg viewBox="0 0 32 32"><line x1="16" y1="3" x2="16" y2="7" stroke="#ffe4dc" stroke-width="2"/><circle cx="16" cy="3" r="2.2" fill="#ff7a5c"/>
+    <rect x="3" y="12" width="3" height="7" rx="1.5" fill="#b5aea4"/><rect x="26" y="12" width="3" height="7" rx="1.5" fill="#b5aea4"/>
+    <rect x="6" y="7" width="20" height="16" rx="5" fill="#f5f2ee"/><rect x="9" y="10.5" width="14" height="8.5" rx="3.5" fill="#1a1c20"/>
+    <circle cx="13" cy="14.8" r="1.9" fill="#ff7a5c"/><circle cx="19" cy="14.8" r="1.9" fill="#ff7a5c"/>
+    <rect x="10" y="24" width="12" height="6" rx="2" fill="#e2ddd6"/></svg>`,
   key: `<svg viewBox="0 0 32 32" fill="none" stroke="#fbbf24" stroke-width="3.5" stroke-linecap="round"><circle cx="10" cy="22" r="6"/>
     <path d="M14.5 17.5 26 6M21 11l3 3M24.5 7.5l3 3"/></svg>`,
   lock: `<svg viewBox="0 0 32 32"><path d="M10 14v-4a6 6 0 0 1 12 0v4" fill="none" stroke="#fff" stroke-width="3"/>
